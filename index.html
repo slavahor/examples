@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Рекламная мультивселенная</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: black; }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // Инициализация Three.js
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // Создание матричного канваса
+        const matrixCanvas = document.createElement('canvas');
+        matrixCanvas.style.position = 'absolute';
+        matrixCanvas.style.top = '0';
+        matrixCanvas.style.left = '0';
+        matrixCanvas.style.width = '100%';
+        matrixCanvas.style.height = '100%';
+        matrixCanvas.style.zIndex = '-1';
+        document.body.insertBefore(matrixCanvas, renderer.domElement);
+        const matrixCtx = matrixCanvas.getContext('2d');
+
+        // Функция изменения размера
+        function resizeCanvas() {
+            matrixCanvas.width = window.innerWidth;
+            matrixCanvas.height = window.innerHeight;
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // Эффект Матрицы
+        const matrixChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%^&*()_+-=[]{}|;:,.<>?";
+        const columns = matrixCanvas.width / 20;
+        const drops = new Array(Math.floor(columns)).fill(1);
+
+        function drawMatrix() {
+            matrixCtx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+            matrixCtx.fillRect(0, 0, matrixCanvas.width, matrixCanvas.height);
+
+            matrixCtx.fillStyle = '#0F0';
+            matrixCtx.font = '15px monospace';
+
+            for (let i = 0; i < drops.length; i++) {
+                const text = matrixChars[Math.floor(Math.random() * matrixChars.length)];
+                matrixCtx.fillText(text, i * 20, drops[i] * 20);
+
+                if (drops[i] * 20 > matrixCanvas.height && Math.random() > 0.975) {
+                    drops[i] = 0;
+                }
+                drops[i]++;
+            }
+        }
+
+        // Создание сферы
+        function createDigitalGridTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 1024;
+            canvas.height = 512;
+            const ctx = canvas.getContext('2d');
+
+            ctx.fillStyle = '#000033';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.strokeStyle = '#00ff00';
+            ctx.lineWidth = 0.5;
+            const gridSize = 32;
+            for (let i = 0; i <= canvas.width; i += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(i, 0);
+                ctx.lineTo(i, canvas.height);
+                ctx.stroke();
+            }
+            for (let i = 0; i <= canvas.height; i += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(0, i);
+                ctx.lineTo(canvas.width, i);
+                ctx.stroke();
+            }
+
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        const geometry = new THREE.SphereGeometry(5, 64, 64);
+        const texture = createDigitalGridTexture();
+        const material = new THREE.MeshPhongMaterial({
+            map: texture,
+            emissive: 0x00ff00,
+            emissiveIntensity: 0.2,
+            transparent: true,
+            opacity: 1,
+            shininess: 50
+        });
+        const sphere = new THREE.Mesh(geometry, material);
+        scene.add(sphere);
+
+        // Добавление свечения
+        const glowGeometry = new THREE.SphereGeometry(5.05, 64, 64);
+        const glowMaterial = new THREE.ShaderMaterial({
+            uniforms: {
+                c: { type: "f", value: 0.1 },
+                p: { type: "f", value: 4.5 },
+                glowColor: { type: "c", value: new THREE.Color(0x00ff00) },
+                viewVector: { type: "v3", value: camera.position }
+            },
+            vertexShader: `
+                uniform vec3 viewVector;
+                varying float intensity;
+                void main() {
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                    vec3 actual_normal = vec3(modelMatrix * vec4(normal, 0.0));
+                    intensity = pow(0.7 - dot(actual_normal, vec3(0.0, 0.0, 1.0)), 2.0);
+                }
+            `,
+            fragmentShader: `
+                uniform vec3 glowColor;
+                varying float intensity;
+                void main() {
+                    vec3 glow = glowColor * intensity;
+                    gl_FragColor = vec4(glow, 1.0);
+                }
+            `,
+            side: THREE.BackSide,
+            blending: THREE.AdditiveBlending,
+            transparent: true
+        });
+
+        const glowMesh = new THREE.Mesh(glowGeometry, glowMaterial);
+        scene.add(glowMesh);
+
+        // Освещение
+        const ambientLight = new THREE.AmbientLight(0x404040);
+        scene.add(ambientLight);
+
+        const light = new THREE.PointLight(0x00ff00, 1, 100);
+        light.position.set(10, 10, 10);
+        scene.add(light);
+
+        camera.position.z = 10;
+
+        // Система всплывающих подсказок
+        const tooltipContainer = document.createElement('div');
+        tooltipContainer.style.position = 'absolute';
+        tooltipContainer.style.top = '0';
+        tooltipContainer.style.left = '0';
+        tooltipContainer.style.width = '100%';
+        tooltipContainer.style.height = '100%';
+        tooltipContainer.style.pointerEvents = 'none';
+        document.body.appendChild(tooltipContainer);
+
+        const hackerTerms = [
+            "SQL Injection", "Buffer Overflow", "Cross-Site Scripting (XSS)",
+            "Man-in-the-Middle Attack", "Denial of Service (DoS)", "Rootkit",
+            "Zero-Day Exploit", "Phishing", "Brute Force Attack",
+            "Backdoor", "Trojan Horse", "Keylogger", "Ransomware",
+            "Cryptojacking", "Social Engineering", "Malware",
+            "Botnet", "Firewall Bypass", "Packet Sniffing", "Privilege Escalation"
+        ];
+
+        let activeTooltips = [];
+
+        function createTooltip(position, text) {
+            const tooltip = document.createElement('div');
+            tooltip.style.position = 'absolute';
+            tooltip.style.backgroundColor = 'rgba(0, 255, 0, 0.1)';
+            tooltip.style.color = '#00ff00';
+            tooltip.style.padding = '10px';
+            tooltip.style.borderRadius = '5px';
+            tooltip.style.fontFamily = 'monospace';
+            tooltip.style.fontSize = '14px';
+            tooltip.style.pointerEvents = 'none';
+            tooltip.style.opacity = '0';
+            tooltip.style.transition = 'opacity 1s';
+            tooltip.style.textShadow = '0 0 5px #00ff00';
+            tooltip.style.boxShadow = '0 0 10px rgba(0, 255, 0, 0.5)';
+            tooltip.style.left = `${position.x}px`;
+            tooltip.style.top = `${position.y}px`;
+            tooltip.textContent = text;
+            tooltipContainer.appendChild(tooltip);
+            return tooltip;
+        }
+
+        function isOverlapping(newPosition) {
+            const margin = 50;
+            return activeTooltips.some(tooltip => {
+                const rect = tooltip.element.getBoundingClientRect();
+                return (Math.abs(newPosition.x - rect.left) < margin &&
+                        Math.abs(newPosition.y - rect.top) < margin);
+            });
+        }
+
+        function updateTooltips() {
+            activeTooltips = activeTooltips.filter(tooltip => {
+                if (tooltip.life <= 0) {
+                    tooltipContainer.removeChild(tooltip.element);
+                    return false;
+                }
+                return true;
+            });
+
+            if (Math.random() < 0.03 && activeTooltips.length < 8) {
+                let attempts = 0;
+                while (attempts < 10) {
+                    const phi = Math.random() * Math.PI * 2;
+                    const theta = Math.random() * Math.PI;
+                    const position = new THREE.Vector3();
+                    position.setFromSpherical(new THREE.Spherical(5, theta, phi));
+                    position.applyMatrix4(sphere.matrixWorld);
+                    const screenPosition = position.project(camera);
+                    const x = (screenPosition.x * 0.5 + 0.5) * window.innerWidth;
+                    const y = (screenPosition.y * -0.5 + 0.5) * window.innerHeight;
+
+                    if (!isOverlapping({x, y})) {
+                        const tooltipText = hackerTerms[Math.floor(Math.random() * hackerTerms.length)];
+                        const tooltipElement = createTooltip({ x, y }, tooltipText);
+
+                        activeTooltips.push({
+                            element: tooltipElement,
+                            life: 300,
+                            state: 'appearing'
+                        });
+                        break;
+                    }
+                    attempts++;
+                }
+            }
+
+            activeTooltips.forEach(tooltip => {
+                tooltip.life--;
+
+                if (tooltip.state === 'appearing' && tooltip.life > 270) {
+                    tooltip.element.style.opacity = (300 - tooltip.life) / 30;
+                } else if (tooltip.state === 'appearing' && tooltip.life <= 270) {
+                    tooltip.element.style.opacity = '1';
+                    tooltip.state = 'visible';
+                } else if (tooltip.state === 'visible' && tooltip.life <= 30) {
+                    tooltip.state = 'disappearing';
+                } else if (tooltip.state === 'disappearing') {
+                    tooltip.element.style.opacity = tooltip.life / 30;
+                }
+            });
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            sphere.rotation.y += 0.002;
+            glowMesh.rotation.y += 0.002;
+            updateTooltips();
+            drawMatrix();
+            renderer.render(scene, camera);
+        }
+        animate();
+    </script>
+</body>
+</html>
